@@ -4,295 +4,422 @@
 # In[1]:
 
 
-import numpy as np
 import pandas as pd
+import numpy as np
+import pickle
+import string
+import sklearn
+from time import time
 import sklearn
 import matplotlib.pyplot as plt
-import time
+import nltk
+from nltk.stem.porter import PorterStemmer
+from nltk.corpus import stopwords
+import string
+from sklearn.preprocessing import LabelEncoder
+import pickle
+from sklearn.externals import joblib
 
 
 # In[2]:
 
 
-df = pd.read_csv(r"C:\Users\Gopinadh\Documents\uci_news_aggregator.csv", error_bad_lines=False)
-df.head(5)
+newsDF = pd.read_csv("./uci-news-aggregator.csv")
 
 
-# In[3]:
+# In[259]:
 
 
-documents = df[['TITLE', 'CATEGORY']] 
-documents['index'] = documents.index
-documents.shape[0]
+newsDF.sample(n=5)
 
 
 # In[4]:
 
 
-documents.head(5)
+newsDF = newsDF[['TITLE','CATEGORY']]
 
 
 # In[5]:
 
 
-print(documents.groupby('CATEGORY').size())
-print("unique targets: " +documents.CATEGORY.unique())
+newsDF.shape[0]
 
 
 # In[6]:
 
 
-documents['CATEGORY'] = df.CATEGORY.map({'b':0,'e':1,'m':2,'t':3})
-outcomes = documents['CATEGORY']
+newsDF.groupby('CATEGORY').describe()
 
-
-# **Performing data preprocessing**
-# 
-# 
-# *   Tokenization - splits the text into sentences and sentences into words
-# 
-# 
-# *   Lower case and remove punctuation
-# *    remove words that have fewer than 3 characters
-# 
-# 
-# *   remove stopwords
-# 
-# *   Lemmatization - words are lemmatized, which is third person are changed to single person and verbs in future and past are changed into present.
-# *  Stemming - words are reduced to its stem/root.
-# 
-# 
 
 # In[7]:
 
 
-import gensim
-from gensim.utils import simple_preprocess
-from gensim.parsing.preprocessing import STOPWORDS
-import nltk
-from nltk.stem import WordNetLemmatizer, SnowballStemmer
-from nltk.stem.porter import *
-np.random.seed(2018)
-nltk.download('wordnet')
+newsDF.sample(n=10, replace=True, random_state=99) 
 
 
 # In[8]:
 
 
-#function to perform lemmatize and stem preprocessing steps on the data set.
-stemmer = PorterStemmer()
-
-def lemmatize_stemming(text):
-    return stemmer.stem(WordNetLemmatizer().lemmatize(text, pos='v'))
-  
-def preprocess(text):
-    clean_words = [lemmatize_stemming(token) for token in gensim.utils.simple_preprocess(text) if token not in gensim.parsing.preprocessing.STOPWORDS and len(token) > 3]
-    return ' '.join(clean_words)
+newsDF.info()
 
 
 # In[9]:
 
 
-#Selecting documents to preview after preprocessing
-doc_sample = documents[documents['index'] == 50000].values[0][0]
-print('original question: ')
-words = []
-for word in doc_sample.split(' '):
-    words.append(word)
-print(words)
-print('\n\n tokenized and lemmatized question: ')
-print(preprocess(doc_sample))
+print("punctuations: ", string.punctuation)
 
 
 # In[10]:
 
 
-processed_docs = documents['TITLE'].map(preprocess)
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
+print("stopwords", stop_words)
+porter = PorterStemmer()
 
 
 # In[11]:
 
 
-processed_docs.head(5)
+def preprocess(title):
+        
+    """ perform lowercase, remove punctuations and then perform stemming and then return string"""
+    
+    """ convert to lower case"""
+    title = title.lower()
+    
+    """ remove punctuation """
+    title = title.translate(str.maketrans("" , "", string.punctuation))
+    
+    """ split the string to tokens """
+    word_data = title.split()
+    
+    """ remove stopwords """
+    new_word_data = []
+    for token in word_data:
+        if token not in stop_words:
+            new_word_data.append(token)
+    
+    new_title = ""
+    
+    """ define porter stemmer - perform stemming """
+    for word in new_word_data:
+        new_title += porter.stem(word) + " "
+        
+    return new_title
 
 
 # In[12]:
 
 
-#Document term matrix
-from sklearn.feature_extraction.text import CountVectorizer
-# Instantiate the CountVectorizer method
-count_vector = CountVectorizer()
-print(count_vector)
+newsDF['TITLE'] = [preprocess(title) for title in newsDF['TITLE']]
 
 
 # In[13]:
 
 
-from sklearn.model_selection import train_test_split
-
-X_train, X_test, y_train, y_test = train_test_split(processed_docs,outcomes, random_state=42)
-
-print('Number of rows in the total set: {}'.format(documents.shape[0]))
-print('Number of rows in the training set: {}'.format(X_train.shape[0]))
-print('Number of rows in the test set: {}'.format(X_test.shape[0]))
+features = newsDF['TITLE']
 
 
 # In[14]:
 
 
-# Fit the training data and then return the matrix
-training_data = count_vector.fit_transform(X_train)
-#count_vector.get_feature_names()
-# Transform testing data and return the matrix. Note we are not fitting the testing data into the CountVectorizer()
-testing_data = count_vector.transform(X_test)
+newsDF['CATEGORY'] = newsDF.CATEGORY.map({'b':0,'e':1,'m':2,'t':3})
+labels = newsDF['CATEGORY']
 
-
-# In[48]:
-
-
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.model_selection import GridSearchCV
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score, classification_report, roc_auc_score
-rfc = RandomForestClassifier()
-nb = MultinomialNB()
-
-
-# **Multinomial NB**
 
 # In[18]:
 
 
-nb.fit(training_data, y_train)
+#pickle.dump( features, open("your_features.csv", "wb") )
+#pickle.dump( labels, open("your_labels.csv", "wb") )
+
+
+# In[266]:
+
+
+newsDF.sample(n=10, replace=True, random_state=99)
+
+
+# In[16]:
+
+
+""" splitting the data into training and testing sets """
+from sklearn.model_selection import train_test_split
+features_train, features_test, labels_train, labels_test = train_test_split(features, labels, test_size=0.25, random_state=42, shuffle= True)
+print('No. of rows in the features_train: {}'.format(features_train.shape[0]))
+print('No. of rows in the features_test: {}'.format(features_test.shape[0]))
+
+
+# In[17]:
+
+
+""" unstructured to structured data"""
+from sklearn.feature_extraction.text import TfidfVectorizer
+vectorizer = TfidfVectorizer()
+features_train = vectorizer.fit_transform(features_train)
+feature_names = vectorizer.get_feature_names()
+#print(feature_names[:150])
+print(features_train.shape)
+print("Non-zero occurences", features_train.nnz)
+
+
+# In[290]:
+
+
+print(feature_names[6000:10000])
+#pickle.dump(feature_names, open("document_terms.txt", "wb"))
 
 
 # In[19]:
 
 
-nb_predicitions_train = nb.predict(training_data)
-nb_predicitions_test = nb.predict(testing_data)
+features_test = vectorizer.transform(features_test)
 
 
 # In[20]:
 
 
-from sklearn.metrics import accuracy_score, confusion_matrix
-acc_nb_train = accuracy_score(nb_predicitions_train,y_train)
-print("accuracy_nb_training:",acc_nb_train)
-acc_nb_test = accuracy_score(nb_predicitions_test,y_test)
-print("accuracy_nb_testing:",acc_nb_test)
+dt_count = features_train.toarray()
+dt_count[1]
 
 
-# In[21]:
+# In[262]:
 
 
-target_names = ['class 0','class 1','class 2','class 3']
-print(classification_report(nb_predicitions_test, y_test, target_names=target_names))
+""" Applying dimensionality reduction and feature selection"""
+from sklearn.feature_selection import SelectPercentile, f_classif
+selector = SelectPercentile(f_classif, percentile=10)
+selector.fit(features_train, labels_train)
+features_train_transformed = selector.transform(features_train)
+features_test_transformed  = selector.transform(features_test)
+print ("No of features after selection :", features_train_transformed.shape[1])
+print("feature scores: ", selector.scores_)
+print ('***Features sorted by score:', [feature_names[i] for i in np.argsort(selector.scores_)[::-1]])
 
 
-# **Logistic Regression**
-
-# In[54]:
+# In[22]:
 
 
+""" Grid search CV for models"""
+from sklearn.model_selection import GridSearchCV
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
-lr = LogisticRegression(multi_class = 'ovr')
-lr.fit(training_data, y_train)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+from sklearn.base import clone
+from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import cross_val_score
 
 
-# In[55]:
+# In[23]:
 
 
-lr_predicitions_train = lr.predict(training_data)
-lr_predicitions_test = lr.predict(testing_data)
+params = [
+
+    {
+        'alpha': [0.001, 0.01, 0.1, 0.5, 1, 10]
+    },
+
+    {
+         'multi_class' : ('multinomial', 'ovr'),
+         'solver' : ('newton-cg', 'sag', 'saga'),
+         'C': [0.01, 0.1, 1, 10, 100]
+    },
+
+    {
+         'criterion' : ('gini', 'entropy'),
+         'n_estimators': [10, 50, 100, 150, 200],
+         'max_depth' : range(1,10),
+         'max_features' : ('sqrt', 'log2'),
+    }
+]
 
 
-# In[56]:
+# In[133]:
 
 
-acc_lr_train = accuracy_score(lr_predicitions_train,y_train)
-print("accuracy_lr_training:",acc_lr_train)
-acc_lr_test = accuracy_score(lr_predicitions_test,y_test)
-print("accuracy_lr_testing:",acc_lr_test)
+models = []
+models.append(('MNB', MultinomialNB()))
+models.append(('LR', LogisticRegression(class_weight = 'balanced')))
+models.append(('RF', RandomForestClassifier()))
 
 
-# In[57]:
+# In[134]:
 
 
-target_names = ['class 0','class 1','class 2','class 3']
-print(classification_report(lr_predicitions_test, y_test, target_names=target_names))
+len(models)
 
 
-# **Random Forest Classifier**
-
-# In[25]:
+# In[135]:
 
 
-t0 = time.time()
-rfc.fit(training_data, y_train)
-t1 = time.time()
-print("--- %s seconds ---" % (t1 - t0))
+clfWithBestParameters = []
 
 
-# In[28]:
+# In[136]:
 
 
-rfc_predictions_train = rfc.predict(training_data)
-rfc_predictions_test = rfc.predict(testing_data)
+i = 0
+for name, clf in models:
+
+    print ("\nFitting the classifier ", name, " to transformed dataset")
+    t0 = time()
+    classifier = GridSearchCV(clf, params[i])
+    classifier = classifier.fit(features_train_transformed, labels_train)
+    print ("done in : ", round(time() - t0,3), "s")
+    print ("best parameters selected for transformed features : \n", classifier.best_params_)
+    parameters = classifier.best_estimator_
+    clfWithBestParameters.append(parameters)
+
+    i += 1
 
 
-# In[29]:
+# In[144]:
 
 
-acc_rfc_train = accuracy_score(rfc_predictions_train,y_train)
-print("accuracy_rfc_training:",acc_rfc_train)
-acc_rfc_test = accuracy_score(rfc_predictions_test,y_test)
-print("accuracy_rfc_testing:",acc_rfc_test)
+len(clfWithBestParameters)
 
 
-# In[31]:
+# In[138]:
 
 
-target_names = ['class 0','class 1','class 2','class 3']
-print(classification_report(rfc_predictions_test, y_test, target_names=target_names))
+parameters
 
 
-# In[61]:
+# In[143]:
 
 
-#params = {'max_depth': range(1,10), 'criterion': ['gini', 'entropy'], 'n_estimators': [10,15,20], 'min_samples_leaf': range(1,10), 'min_samples_split': [2,5,10]}
-params = {
-  "estimator__n_estimators": [10,15,20],
-  "estimator__criterion": ['gini', 'entropy'],
-  "estimator__max_depth" : range(1,10),
-  "estimator__min_samples_leaf" : range(1,10),
-  "estimator__min_samples_split" : [2, 5, 10],
-}
-#scorers = {'f1_score': make_scorer(f1_score, average=None)}
-model_to_tune = OneVsRestClassifier(estimator = RandomForestClassifier(random_state=0))
-grid_obj = GridSearchCV(model_to_tune, params, n_jobs=2)
-t0 = time.time()
-grid_fit = grid_obj.fit(training_data, y_train)
-t1 = time.time()
-print("--- %s seconds ---" % (t1 - t0))
-best_clf = grid_fit.best_estimator_
-print(grid_fit.best_params_)
-best_clf
+print(clfWithBestParameters[0])
+print(clfWithBestParameters[1])
+print(clfWithBestParameters[2])
 
 
-# In[62]:
+# In[145]:
 
 
-unseen_document = 'The Pale Red Dot --Distant Oort Cloud Planet Discovered Beyond Known Edge'
-bow_vector = preprocess(unseen_document)
-unseen_testing_data = count_vector.transform(bow_vector)
-x = nb.predict(unseen_testing_data)
-y = lr.predict(unseen_testing_data)
-z = rfc.predict(unseen_testing_data)
-print("{},{},{}".format(x,y,z))
+i = 0
+highestAcc = 0
+for name, clf in models:
+
+    # estimate the accuracy of a model on the dataset by splitting the data, fitting a
+    # model and computing the score 10 consecutive times (with 10 different splits each time)
+    skf = StratifiedKFold(n_splits=10, shuffle = True, random_state = 42)
+
+    # finding accuracy with transformed features
+    classifier = clfWithBestParameters[i]
+    acc = cross_val_score(classifier, features_train_transformed, labels_train, cv = skf, scoring='accuracy')
+    print ("accuracy for ", name, " with transformed features : ", acc.mean())
+
+    if highestAcc < acc.mean():
+        highestAcc = acc.mean()
+        bestModel = clone(classifier)
+
+    i += 1
+
+
+print ("So the most accurate model is : ", bestModel)
+
+
+# In[146]:
+
+
+bestModel.fit(features_train, labels_train)
+predictions = bestModel.predict(features_test)
+print("Testing accuracy: ", accuracy_score(labels_test, predictions))
+print("Confusion matrix: \n", confusion_matrix(labels_test, predictions))
+#print(classification_report(labels_test, predictions)) 
+
+
+# In[147]:
+
+
+filename = 'bestmodel.sav'
+pickle.dump(bestModel, open(filename, 'wb'))
+
+
+# In[148]:
+
+
+loaded_model = pickle.load(open(filename, 'rb'))
+
+
+# In[149]:
+
+
+loaded_model
+
+
+# **Testing the model with real data**
+
+# In[278]:
+
+
+real_data = pd.read_csv("./testing.csv")
+
+
+# In[279]:
+
+
+real_data.info()
+
+
+# In[280]:
+
+
+real_data['TITLE'] = [preprocess(title) for title in real_data['TITLE']]
+
+
+# In[281]:
+
+
+test_features = real_data['TITLE']
+
+
+# In[282]:
+
+
+real_data['CATEGORY'] = real_data.CATEGORY.map({'b':0,'e':1,'m':2,'t':3})
+test_labels = real_data['CATEGORY']
+
+
+# In[283]:
+
+
+test_features = vectorizer.transform(test_features)
+
+
+# In[284]:
+
+
+test_predictions = loaded_model.predict(test_features)
+
+
+# In[285]:
+
+
+print("Testing accuracy: ", accuracy_score(test_labels, test_predictions))
+print("Confusion matrix: \n", confusion_matrix(test_labels, test_predictions))
+
+
+# In[286]:
+
+
+real_data['PREDICTED_CATEGORY'] = test_predictions
+
+
+# In[287]:
+
+
+real_data.sample(n=10)
+
+
+# In[288]:
+
+
+real_data.to_csv('real_data_testing.csv')
 
 
 # In[ ]:
